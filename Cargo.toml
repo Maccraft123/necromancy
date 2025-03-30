@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+	"elf2nof",
+	"nof",
+	"necro", "necro-derive",
+]
+
+[profile.release]
+opt-level = "s"
+strip = true
+lto = true
+panic = "abort"
+codegen-units = 2
