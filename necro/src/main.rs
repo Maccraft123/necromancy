@@ -4,10 +4,14 @@ use std::borrow::Borrow;
 use std::path::PathBuf;
 use std::fmt::Debug;
 use std::collections::{BTreeMap, BTreeSet};
+use std::mem;
 
 use clap::Parser;
+use num_traits::FromPrimitive;
 
 mod cpu;
+use cpu::MaybeSymbol;
+use cpu::TypeEndian;
 //use cpu::{Cpu, Endian, ParseUtils, match_cpu};
 
 //mod parser;
@@ -82,10 +86,98 @@ fn match_os(c: &str) -> Option<Box<dyn Os>> {
 }
 
 #[derive(Debug)]
+pub struct SymbolRegistry<'a, 'b> {
+    strings: BTreeMap<&'a str, &'b str>,
+    numbers: BTreeMap<&'a str, u32>,
+    imports: BTreeSet<&'a str>,
+}
+
+impl<'a, 'b> SymbolRegistry<'a, 'b> {
+    fn new() -> Self {
+        Self {
+            strings: BTreeMap::new(),
+            numbers: BTreeMap::new(),
+            imports: BTreeSet::new(),
+        }
+    }
+    fn get<'me, T: FromPrimitive>(&'me mut self, name: &str) -> T {
+        if let Some(val) = self.numbers.get(name) {
+            T::from_u32(*val).unwrap()
+        } else {
+            eprintln!("todo: adding symbols, requested {name}");
+            T::from_u32(0).unwrap()
+        }
+    }
+    fn import<'me>(&'me mut self, name: &'a str) {
+        self.imports.insert(name);
+    }
+    fn insert_num<'me>(&'me mut self, name: &'a str, value: u32) {
+        self.numbers.insert(name, value);
+    }
+    fn insert_str<'me>(&'me mut self, name: &'a str, value: &'b str) {
+        self.strings.insert(name, value);
+    }
+}
+
+#[derive(Debug)]
+struct SymbolReference {
+    name: String,
+    endian: cpu::Endian,
+    mask: u32,
+    len: u8,
+    correction: i8,
+    shift: i8,
+}
+
+impl SymbolReference {
+    fn simple_len(name: String, endian: cpu::Endian, len: u8) -> Self {
+        Self {
+            name,
+            endian,
+            len,
+            correction: 0,
+            shift: 0,
+            mask: 0xffff_ffff,
+        }
+    }
+    fn simple_u8(name: String, endian: cpu::Endian) -> Self {
+        Self::simple_len(name, endian, mem::size_of::<u8>() as u8)
+    }
+}
+
+/*impl<'a, E: TypeEndian, T: Sized + Clone> From<MaybeSymbol<'a, E, T>> for SymbolReference<'a> {
+    fn from(t: MaybeSymbol<'a, E, T>) -> Self {
+        let MaybeSymbol::Sym(name, _) = t else { unreachable!() };
+        Self {
+            name,
+            endian: E::endian(),
+            len: mem::size_of::<T>() as u8,
+            correction: 0,
+            shift: 0,
+            mask: 0xffff_ffff,
+        }
+    }
+}*/
+
+#[derive(Debug)]
 struct Section<'a> {
     name: &'a str,
     base: Option<usize>,
     data: Vec<u8>,
+    // usize is the offset from start of the segment
+    syms: Vec<(usize, SymbolReference)>
+}
+
+impl<'a> Extend<u8> for Section<'a> {
+    fn extend<I: IntoIterator<Item = u8>>(&mut self, i: I) {
+        self.data.extend(i)
+    }
+}
+
+impl<'a, 'i> Extend<&'i u8> for Section<'a> {
+    fn extend<I: IntoIterator<Item = &'i u8>>(&mut self, i: I) {
+        self.data.extend(i)
+    }
 }
 
 impl<'a> Section<'a> {
@@ -94,26 +186,22 @@ impl<'a> Section<'a> {
             name,
             base,
             data: Vec::new(),
+            syms: Vec::new(),
         }
     }
-    /*fn add_data<T, U>(&mut self, cpu: &Box<dyn Cpu>, d: T)
-    where
-        T: IntoIterator<Item = U>,
-        U: IntoBytes,
-    {
-        match cpu.endian() {
-            Endian::Big => {
-                self.data.extend(
-                    d.into_iter().map(|v| v.to_be_bytes()).flatten()
-                );
-            },
-            Endian::Little => {
-                self.data.extend(
-                    d.into_iter().map(|v| v.to_le_bytes()).flatten()
-                );
-            },
-        }
-    }*/
+    fn add_sym<T, E: TypeEndian>(&mut self, name: String) {
+        let s = SymbolReference::simple_len(name, E::endian(), mem::size_of::<T>() as u8);
+        self.add_sym_ref(s);
+    }
+    fn add_sym_ref(&mut self, s: SymbolReference) {
+        self.syms.push((self.data.len(), s));
+    }
+    fn push(&mut self, d: u8) {
+        self.data.push(d);
+    }
+    fn last_mut(&mut self) -> &mut u8 {
+        self.data.last_mut().unwrap()
+    }
 }
 
 fn escape<T: ToString>(t: T) -> String {
@@ -140,99 +228,53 @@ fn main() {
     let src = fs::read_to_string(args.file).unwrap();
     //let f = templater::process(&f);
     let (tokens, state) = lexer::parse(&src);
-    dbg!(tokens);
-    dbg!(state);
-    //let (tokens, errs2) = p.parse(&ltokens).into_output_errors();
+    let tokens = tokens.unwrap();
 
+    let mut reg = SymbolRegistry::new();
 
-    /*
-    let mut cpu = None;
-    let mut os = None;
-    let mut const_symbols = BTreeMap::new();
-    let mut imports = BTreeSet::new();
-    let mut exports = BTreeMap::new();
-    let mut labels = BTreeSet::new();
-
-    // Register symbols and labels first 
-    for tok in &tokens {
-        match tok {
-            Token::SetCpu(compat) => cpu = match_cpu(compat),
-            Token::SetOs(compat) => os = match_os(compat),
-            Token::DefineSym(name, addr) => { const_symbols.insert(name, addr); },
-            Token::ImportSym(name) => { imports.insert(name); },
-            Token::ExportSym(name) => { exports.insert(name, None::<usize>); },
-            Token::Label(name) => { labels.insert(name); },
-            Token::Instruction(..) => (),
+    for t in tokens.iter() {
+        match &t {
+            Token::SetStr(name, value) => reg.insert_str(name, value),
+            Token::SetNum(name, value) => reg.insert_num(name, *value),
+            Token::Import(name) => reg.import(name),
+            Token::Label(name) => reg.import(name),
             _ => (),
         }
     }
 
-    let cpu = cpu.take().unwrap();
-    let os = os.take().unwrap();
+    println!("symbols: {:?}", reg);
 
-    let names_iter = const_symbols.iter()
-        .map(|s| s.0)
-        .chain(imports.iter())
-        .chain(labels.iter())
-        .chain(exports.iter().map(|s| s.0));
-
-    let mut pu = ParseUtils::new();
-    for sym in names_iter {
-        if !cpu.symbol_name_ok(sym) {
-            panic!("Symbol name '{}' is invalid for {:?} CPU", sym, cpu);
-        }
-        pu.add_symbol(sym);
-    }
-
-    /* And now we can populate section data */
     let mut sections = Vec::new();
     let mut cur_section = None;
-    macro_rules! to_cur_section {
-        ($data: expr) => {
-            cur_section.as_mut().unwrap().add_data(&cpu, $data)
-        }
-    }
-    for tok in &tokens {
-        match tok {
-            Token::BeginSection(name, start) => {
-                if let Some(section) = cur_section.take() {
-                    sections.push(section);
+    use cpu::EncodeInstruction;
+    for t in tokens.iter() {
+        match t {
+            Token::Section(name, base) => {
+                if let Some(s) = cur_section.take() {
+                    sections.push(s);
                 }
-                cur_section = Some(Section::new(name, *start));
+                let base = base.map(|v| v as usize);
+                cur_section = Some(Section::new(name, base));
             },
-            Token::Str(kind, d) => {
-                match kind {
-                    StringKind::ByteStr => {
-                        let borrowed: &str = d.borrow();
-                        to_cur_section!(borrowed.bytes());
-                    },
-                    StringKind::OsStr => {
-                        to_cur_section!(os.encode_str(d));
-                    },
+            Token::Instruction(i) => {
+                if let Some(s) = cur_section.as_mut() {
+                    i.encode(s, &mut reg);
+                } else {
+                    eprintln!("no section but tried to emit instruction");
+                    todo!("error handling");
                 }
             },
-            Token::Instruction(raw) => {
-                let parsed = cpu.parse_instruction(raw, &pu).unwrap();
-                println!("{:x?}", parsed);
-                //to_cur_section!(parsed.1.encode(&mut pu));
-            },
-            Token::Imm8(..) => {
-            },
-            Token::Imm16(..) => {
-            },
-            Token::Imm32(..) => {
-            },
-            Token::SetCpu(..) | Token::SetOs(..) | Token::DefineSym(..) | Token::ImportSym(..) |
-                Token::ExportSym(..) | Token::Label(..) | Token::Comment(..) => (),
+            _ => (),
         }
     }
-
-    if let Some(section) = cur_section.take() {
-        sections.push(section);
+    if let Some(s) = cur_section.take() {
+        sections.push(s);
     }
 
 
-    println!("CPU: {cpu:?}");
+    println!("{:#x?}", sections);
+
+/*    println!("CPU: {cpu:?}");
     println!("OS/ABI: {os:?}");
     println!("Constant symbols:");
     println!("{:#x?}", const_symbols);

@@ -4,12 +4,12 @@
 .set BDOS 0x05
 .set PRINT_STR 0x09
 
-.section code
+.section code 0x100
 entry:
-	mvi c 0x5
+	mvi c 0x05
 	lxi de hello_str
 	call BDOS
-	jc 0
+	jc 0x0000
 	ret
 
 .set cpu "mos,6502"

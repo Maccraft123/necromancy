@@ -254,11 +254,12 @@ pub fn encode_operand(input: TokenStream) -> TokenStream {
     quote! {
         impl EncodeOperand<#primitive> for #name {
             fn encode_into(&self,
-                target: &mut Vec<u8>,
+                target: &mut crate::Section,
                 shift: u32,
                 map: Option<fn(#name) -> #primitive>,
+                _: &mut crate::SymbolRegistry,
             ) {
-                let last = target.last_mut().unwrap();
+                let last = target.last_mut();
                 if let Some(m) = map {
                     *last |= m(*self) << shift;
                 } else {
@@ -360,13 +361,13 @@ pub fn encode_instruction(input: TokenStream) -> TokenStream {
                 if let Some(w) = f.with {
                     field_encoders.push(
                         quote!{
-                            #w(*#field, out);
+                            #w(*#field, out, reg);
                         }
                     );
                 } else {
                     field_encoders.push(
                         quote!{
-                            #field.encode_into(out, #shift, #with);
+                            #field.encode_into(out, #shift, #with, reg);
                         }
                     );
                 }
@@ -392,7 +393,7 @@ pub fn encode_instruction(input: TokenStream) -> TokenStream {
     let (generics, ty_generics, where_clause) = input.generics.split_for_impl();
     quote! {
         impl #generics EncodeInstruction for #name #ty_generics #where_clause {
-            fn encode(&self, out: &mut Vec<u8>) {
+            fn encode(&self, out: &mut crate::Section, reg: &mut crate::SymbolRegistry) {
                 match self {
                     #(#arms)*
                 }

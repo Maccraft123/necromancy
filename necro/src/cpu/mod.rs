@@ -2,7 +2,9 @@ use std::fmt::Debug;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use crate::lexer::{self, ParseNum};
-use num_traits::ToBytes;
+use num_traits::{FromPrimitive, ToBytes};
+use crate::SymbolRegistry;
+use crate::Section;
 
 mod i8080;
 
@@ -49,32 +51,35 @@ use necro_derive::EncodeOperand;
 /// #[operand(rename = "aaa")] Uses "aaa" "AAA" instead of variant name for parsing
 pub trait EncodeOperand<T>: Sized + Clone {
     /// Encodes self.
-    /// target: The output vector, guaranteed to not be empty so that bitfield-operands can just
+    /// target: The output section
     /// take the reference from last element and unwrap it without error handling
     /// shift: Amount of left-shifts for bitfield-operands
     /// map: Optional mapping function applied before shifting
+    /// reg: Symbol registration struct
     fn encode_into(&self,
-        target: &mut Vec<u8>,
+        target: &mut Section,
         shift: u32,
         map: Option<fn(Self) -> T>,
+        reg: &mut SymbolRegistry,
     );
 }
 
 use std::ops::Shl;
-impl<'a, E: TypeEndian, T: ToBytes + Clone + Shl<usize, Output = T>> EncodeOperand<T> for MaybeSymbol<'a, E, T> {
-    fn encode_into(&self, tgt: &mut Vec<u8>, shift: u32, map: Option<fn(Self) -> T>) {
-        match self {
-            Self::Sym(symbol, _) => todo!(),
-            Self::Literal(lit) => {
-                let mut lit: T = lit.clone();
-                if let Some(m) = map {
-                    lit = m(self.clone());
-                }
-                tgt.extend(
-                    E::to_bytes(lit << shift as usize).as_ref()
-                );
-            },
+impl<'a, E: TypeEndian, T: ToBytes + Clone + Shl<usize, Output = T> + FromPrimitive> EncodeOperand<T> for MaybeSymbol<'a, E, T> {
+    fn encode_into(&self, tgt: &mut Section, shift: u32, map: Option<fn(Self) -> T>, reg: &mut SymbolRegistry) {
+        let mut lit: T = match self {
+            Self::Sym(symbol, _) => {
+                tgt.add_sym::<T, E>(symbol.to_string());
+                reg.get(symbol)
+            }
+            Self::Literal(lit) => lit.clone(),
+        };
+        if let Some(m) = map {
+            lit = m(self.clone());
         }
+        tgt.extend(
+            E::to_bytes(lit << shift as usize).as_ref()
+        );
     }
 }
 
@@ -110,7 +115,7 @@ use necro_derive::EncodeInstruction;
 /// implementation
 ///
 pub trait EncodeInstruction: Sized {
-    fn encode(&self, dst: &mut Vec<u8>);
+    fn encode(&self, s: &mut Section, r: &mut SymbolRegistry);
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -118,19 +123,26 @@ struct Big;
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct Little;
 
-trait TypeEndian: Clone {
+pub trait TypeEndian: Clone {
     fn to_bytes<T: ToBytes>(_: T) -> T::Bytes;
+    fn endian() -> Endian;
 }
 
 impl TypeEndian for Big {
     fn to_bytes<T: ToBytes>(val: T) -> T::Bytes {
         val.to_be_bytes()
     }
+    fn endian() -> Endian {
+        Endian::Big
+    }
 }
 
 impl TypeEndian for Little {
     fn to_bytes<T: ToBytes>(val: T) -> T::Bytes {
         val.to_le_bytes()
+    }
+    fn endian() -> Endian {
+        Endian::Little
     }
 }
 
@@ -150,7 +162,7 @@ impl<'a, T: Sized + Clone> MaybeSymbolNoEndian<'a, T> {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-enum MaybeSymbol<'a, E: TypeEndian, T: Sized + Clone> {
+pub enum MaybeSymbol<'a, E: TypeEndian, T: Sized + Clone> {
     Sym(&'a str, PhantomData<E>),
     Literal(T),
 }
@@ -186,6 +198,15 @@ pub enum Endian {
 pub enum DynInstruction<'a> {
     Intel8080(i8080::Instruction<'a>),
     Mos6502(String),
+}
+
+impl<'a> EncodeInstruction for DynInstruction<'a> {
+    fn encode(&self, sec: &mut Section, reg: &mut SymbolRegistry) {
+        match self {
+            DynInstruction::Intel8080(i) => i.encode(sec, reg),
+            DynInstruction::Mos6502(i) => (),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]

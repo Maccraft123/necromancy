@@ -166,8 +166,8 @@ pub enum Instruction<'a> {
     Nop = 0x00,
 }
 
-fn rst_encode(v: u8, target: &mut Vec<u8>) {
-    let last = target.last_mut().unwrap();
+fn rst_encode(v: u8, target: &mut crate::Section, _: &mut crate::SymbolRegistry) {
+    let last = target.last_mut();
     *last |= v & 0o70;
 }
 

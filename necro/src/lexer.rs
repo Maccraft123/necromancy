@@ -24,7 +24,7 @@ use crate::cpu::{Cpu, DynInstruction};
 pub enum Token<'a> {
     SetStr(&'a str, &'a str),
     SetNum(&'a str, u32),
-    Section(&'a str),
+    Section(&'a str, Option<u64>),
     Import(&'a str),
     Export(&'a str),
     Label(&'a str),
@@ -109,6 +109,15 @@ pub fn number<'a, T: ParseNum>(input: &mut Stream<'a, '_>) -> ModalResult<T> {
     T::parse(input)
 }
 
+fn parse_section<'a>(input: &mut Stream<'a, '_>) -> ModalResult<Token<'a>> {
+    (
+        ident,
+        opt(preceded(space1, number)),
+    )
+        .map(|(name, base)| Token::Section(name, base))
+        .parse_next(input)
+}
+
 fn parse_set<'a>(input: &mut Stream<'a, '_>) -> ModalResult<Token<'a>> {
     let ret = alt((
         preceded(("cpu", space1), cut_err(Cpu::parse)).map(Token::SetCpu),
@@ -136,10 +145,22 @@ fn parse_token<'a>(input: &mut Stream<'a, '_>) -> ModalResult<Token<'a>> {
     delimited(
         multispace0,
         alt((
-            preceded((".set", space1), cut_err(parse_set)),
-            preceded((".section", space1), cut_err(ident)).map(Token::Section),
-            terminated(ident, ":").map(Token::Label),
-            preceded(";", till_line_ending).map(Token::Comment),
+            preceded(
+                (".set", space1),
+                cut_err(parse_set),
+            ),
+
+            preceded(
+                (".section", space1),
+                cut_err(parse_section)
+            ),
+
+            terminated(ident, ":")
+                .map(Token::Label),
+
+            preceded(";", till_line_ending)
+                .map(Token::Comment),
+
             cut_err(instruction.context(StrContext::Label("instruction"))),
         )),
         multispace1,
