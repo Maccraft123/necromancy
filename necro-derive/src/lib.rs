@@ -1,6 +1,5 @@
 use darling::{
-    FromDeriveInput, FromMeta, FromVariant, FromField,
-    FromAttributes, Error,
+    FromDeriveInput, FromVariant, FromField, Error,
     util, ast,
 };
 use proc_macro::TokenStream;
@@ -154,8 +153,8 @@ pub fn instruction(input: TokenStream) -> TokenStream {
         let name = var.ident;
         let (name_upper, name_lower) = ident_upper_lower(&name);
 
-        let mut field_parsers = Vec::new();
-        let mut field_names = Vec::new();
+        let field_parsers;
+        let field_names: Vec<_>;
 
         if var.fields.is_empty() {
             variant_parsers.push(quote! {
@@ -170,7 +169,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
                 .enumerate()
                 .map(|(i, _)| format_ident!("field{i}"))
                 .collect();
-            let mut fields = quote!{ (#(#field_parsers),*).map(|(#(#field_names),*)| Self::#name(#(#field_names),*)) };
+            let fields = quote!{ (#(#field_parsers),*).map(|(#(#field_names),*)| Self::#name(#(#field_names),*)) };
 
             if var.fuse_first_field {
                 fused_variants.push(quote! {
@@ -186,7 +185,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
         }
     }
 
-    let mut parser;
+    let parser;
     if fused_variants.is_empty() {
         parser = quote!{
             winnow::combinator::dispatch!{crate::lexer::ident;
@@ -225,7 +224,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
 
 #[derive(Debug, FromVariant)]
 struct EncodeOperandVariant {
-    ident: Ident,
+    //ident: Ident,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -233,7 +232,7 @@ struct EncodeOperandVariant {
 struct EncodeOperandInput {
     ident: Ident,
     attrs: Vec<syn::Attribute>,
-    data: ast::Data<EncodeOperandVariant, util::Ignored>
+    //data: ast::Data<EncodeOperandVariant, util::Ignored>
 }
 
 #[proc_macro_derive(EncodeOperand)]
@@ -254,10 +253,10 @@ pub fn encode_operand(input: TokenStream) -> TokenStream {
     quote! {
         impl EncodeOperand<#primitive> for #name {
             fn encode_into(&self,
-                target: &mut crate::Section,
+                target: &mut crate::section::Section,
                 shift: u32,
                 map: Option<fn(#name) -> #primitive>,
-                _: &mut crate::SymbolRegistry,
+                _: &mut crate::section::SymbolRegistry,
             ) {
                 let last = target.last_mut();
                 if let Some(m) = map {
@@ -393,7 +392,7 @@ pub fn encode_instruction(input: TokenStream) -> TokenStream {
     let (generics, ty_generics, where_clause) = input.generics.split_for_impl();
     quote! {
         impl #generics EncodeInstruction for #name #ty_generics #where_clause {
-            fn encode(&self, out: &mut crate::Section, reg: &mut crate::SymbolRegistry) {
+            fn encode(&self, out: &mut crate::section::Section, reg: &mut crate::section::SymbolRegistry) {
                 match self {
                     #(#arms)*
                 }

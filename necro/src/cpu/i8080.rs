@@ -166,7 +166,7 @@ pub enum Instruction<'a> {
     Nop = 0x00,
 }
 
-fn rst_encode(v: u8, target: &mut crate::Section, _: &mut crate::SymbolRegistry) {
+fn rst_encode(v: u8, target: &mut crate::section::Section, _: &mut crate::section::SymbolRegistry) {
     let last = target.last_mut();
     *last |= v & 0o70;
 }

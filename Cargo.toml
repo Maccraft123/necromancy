@@ -6,6 +6,8 @@ members = [
 	"necro", "necro-derive",
 ]
 
+default-members = ["necro"]
+
 [profile.release]
 opt-level = "s"
 strip = true

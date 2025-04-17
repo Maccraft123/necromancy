@@ -1,10 +1,8 @@
 use std::fmt::Debug;
-use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use crate::lexer::{self, ParseNum};
 use num_traits::{FromPrimitive, ToBytes};
-use crate::SymbolRegistry;
-use crate::Section;
+use crate::section::{SymbolRegistry, Section};
 
 mod i8080;
 
@@ -69,8 +67,9 @@ impl<'a, E: TypeEndian, T: ToBytes + Clone + Shl<usize, Output = T> + FromPrimit
     fn encode_into(&self, tgt: &mut Section, shift: u32, map: Option<fn(Self) -> T>, reg: &mut SymbolRegistry) {
         let mut lit: T = match self {
             Self::Sym(symbol, _) => {
-                tgt.add_sym::<T, E>(symbol.to_string());
-                reg.get(symbol)
+                tgt.symbol::<T, E>(reg, symbol.to_string())
+                //tgt.add_sym::<T, E>(symbol.to_string());
+                //reg.get(symbol)
             }
             Self::Literal(lit) => lit.clone(),
         };
@@ -119,9 +118,9 @@ pub trait EncodeInstruction: Sized {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-struct Big;
+pub struct Big;
 #[derive(Debug, Eq, PartialEq, Clone)]
-struct Little;
+pub struct Little;
 
 pub trait TypeEndian: Clone {
     fn to_bytes<T: ToBytes>(_: T) -> T::Bytes;
@@ -186,6 +185,7 @@ impl<'a, E: TypeEndian, T: Sized + Clone> From<MaybeSymbolNoEndian<'a, T>> for M
 }
 
 pub type LeSymbol<'a, T> = MaybeSymbol<'a, Little, T>;
+#[allow(dead_code)]
 pub type BeSymbol<'a, T> = MaybeSymbol<'a, Big, T>;
 
 #[derive(Copy, Clone, Debug)]
@@ -204,7 +204,7 @@ impl<'a> EncodeInstruction for DynInstruction<'a> {
     fn encode(&self, sec: &mut Section, reg: &mut SymbolRegistry) {
         match self {
             DynInstruction::Intel8080(i) => i.encode(sec, reg),
-            DynInstruction::Mos6502(i) => (),
+            DynInstruction::Mos6502(_) => (),
         }
     }
 }

@@ -5,30 +5,27 @@ use winnow::{
         terminated,
     },
     error::{
-        ContextError, StrContext, ParseError, ParserError, FromExternalError, AddContext
+        StrContext,
     },
     ascii::{
-        alpha1, alphanumeric1, space0, multispace1, space1, till_line_ending, multispace0,
+        multispace1, space1, till_line_ending, multispace0,
     },
     token::{
-        take_till, take_while, one_of, none_of, take_until, rest, take,
+        take_while, one_of, take_until, take,
     },
 };
 
-use std::num::ParseIntError;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use crate::cpu::{Cpu, DynInstruction};
+use crate::cpu::Cpu;
 
 #[derive(Debug, Clone)]
 pub enum Token<'a> {
     SetStr(&'a str, &'a str),
     SetNum(&'a str, u32),
     Section(&'a str, Option<u64>),
-    Import(&'a str),
-    Export(&'a str),
     Label(&'a str),
-    Comment(&'a str),
+    Comment,
     SetCpu(Cpu),
     Instruction(crate::cpu::DynInstruction<'a>),
 }
@@ -39,8 +36,6 @@ pub enum Token<'a> {
 #[derive(Debug)]
 pub struct ParseState<'a> {
     cpu: Cpu,
-    imports: Vec<&'a str>,
-    exports: Vec<&'a str>,
     sets: BTreeMap<&'a str, Cow<'a, str>>,
 }
 
@@ -48,8 +43,6 @@ impl<'a> ParseState<'a> {
     fn new() -> Self {
         Self {
             cpu: Cpu::None,
-            imports: Vec::new(),
-            exports: Vec::new(),
             sets: BTreeMap::new(),
         }
     }
@@ -159,7 +152,7 @@ fn parse_token<'a>(input: &mut Stream<'a, '_>) -> ModalResult<Token<'a>> {
                 .map(Token::Label),
 
             preceded(";", till_line_ending)
-                .map(Token::Comment),
+                .map(|_| Token::Comment),
 
             cut_err(instruction.context(StrContext::Label("instruction"))),
         )),
