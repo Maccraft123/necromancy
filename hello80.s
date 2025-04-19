@@ -6,6 +6,7 @@
 
 .section code 0x100
 entry:
+	ęśąćż
 	mvi c 0x05
 	lxi de hello_str
 	call BDOS

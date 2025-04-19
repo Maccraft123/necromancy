@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use crate::lexer::{self, ParseNum};
+use crate::parser::{self, ParseNum};
 use num_traits::{FromPrimitive, ToBytes};
 use crate::section::{SymbolRegistry, Section};
 
@@ -9,29 +9,29 @@ mod i8080;
 use necro_derive::ParseOperand;
 /// A common trait for parsing any kind of operand
 pub trait ParseOperand<'a>: Sized {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<Self, crate::lexer::Error>;
+    fn parse(input: &mut parser::Stream<'a, '_>) -> ModalResult<Self, crate::parser::Error>;
 }
 
 impl<'a, T: ParseNum> ParseOperand<'a> for T {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<T, crate::lexer::Error> {
-        lexer::number.parse_next(input)
+    fn parse(input: &mut parser::Stream<'a, '_>) -> ModalResult<T, crate::parser::Error> {
+        parser::number.parse_next(input)
     }
 }
 
 impl<'a, T: ParseNum> ParseOperand<'a> for MaybeSymbolNoEndian<'a, T> {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<MaybeSymbolNoEndian<'a, T>, crate::lexer::Error> {
+    fn parse(input: &mut parser::Stream<'a, '_>) -> ModalResult<MaybeSymbolNoEndian<'a, T>, crate::parser::Error> {
         alt((
-            lexer::number.map(MaybeSymbolNoEndian::new_literal),
-            lexer::ident.map(MaybeSymbolNoEndian::new_symbol),
+            parser::number.map(MaybeSymbolNoEndian::new_literal),
+            parser::ident.map(MaybeSymbolNoEndian::new_symbol),
         )).parse_next(input)
     }
 }
 
 impl<'a, E: TypeEndian, T: ParseNum> ParseOperand<'a> for MaybeSymbol<'a, E, T> {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<MaybeSymbol<'a, E, T>, crate::lexer::Error> {
+    fn parse(input: &mut parser::Stream<'a, '_>) -> ModalResult<MaybeSymbol<'a, E, T>, crate::parser::Error> {
         alt((
-            lexer::number.map(MaybeSymbol::new_literal),
-            lexer::ident.map(MaybeSymbol::new_symbol),
+            parser::number.map(MaybeSymbol::new_literal),
+            parser::ident.map(MaybeSymbol::new_symbol),
         )).parse_next(input)
     }
 }
@@ -94,7 +94,7 @@ use necro_derive::ParseInstruction;
 ///     together into one word
 ///
 pub trait ParseInstruction<'a>: Sized {
-    fn parse<'b>(input: &'b mut lexer::Stream<'a, '_>) -> ModalResult<Self, crate::lexer::Error> where Self: 'a;
+    fn parse<'b>(input: &'b mut parser::Stream<'a, '_>) -> ModalResult<Self, crate::parser::Error> where Self: 'a;
 }
 
 use necro_derive::EncodeInstruction;
@@ -220,10 +220,10 @@ use winnow::error::StrContext;
 use winnow::error::StrContextValue;
 use winnow::combinator::{delimited, alt, fail};
 use winnow::ascii::till_line_ending;
-use crate::lexer::{ParseContext, Stream};
+use crate::parser::{ParseContext, Stream};
 
 impl Cpu {
-    pub fn parse(input: &mut Stream<'_, '_>) -> ModalResult<Cpu, crate::lexer::Error> {
+    pub fn parse(input: &mut Stream<'_, '_>) -> ModalResult<Cpu, crate::parser::Error> {
         delimited(
             '"',
             alt((
@@ -235,7 +235,7 @@ impl Cpu {
             .parse_next(input)
     }
 
-    /*pub fn instruction<'a, 'b>(&self, input: &'b mut lexer::Stream<'a, '_>) -> ModalResult<DynInstruction<'a>, crate::lexer::Error> {
+    /*pub fn instruction<'a, 'b>(&self, input: &'b mut parser::Stream<'a, '_>) -> ModalResult<DynInstruction<'a>, crate::parser::Error> {
         match self {
             Cpu::Intel8080 => {
                 i8080::Instruction::parse(input)
@@ -252,7 +252,7 @@ impl Cpu {
     }*/
 }
 
-use crate::lexer::{Error};
+use crate::parser::{Error};
 use winnow::error::ErrMode;
 
 impl<'a> Parser<Stream<'a, '_>, DynInstruction<'a>, ErrMode<Error>> for Cpu {

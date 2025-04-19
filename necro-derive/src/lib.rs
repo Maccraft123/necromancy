@@ -76,14 +76,14 @@ pub fn operand(input: TokenStream) -> TokenStream {
     let name = input.ident;
     quote! {
         impl<'a> ParseOperand<'a> for #name {
-            fn parse(input: &mut crate::lexer::Stream<'a, '_>) -> winnow::ModalResult<#name, crate::lexer::Error> {
+            fn parse(input: &mut crate::parser::Stream<'a, '_>) -> winnow::ModalResult<#name, crate::parser::Error> {
                 use ::winnow::Parser;
                 use ::winnow::combinator::{empty, fail};
                 /*
                  * Here we grab all the parsers we've built, and throw them all into `dispatch`
                  * combinator to get any of those variants.
                  */
-                winnow::combinator::dispatch!{crate::lexer::ident;
+                winnow::combinator::dispatch!{crate::parser::ident;
                     #(#parsers)*
                     _ => fail,
                 }.parse_next(input)
@@ -188,7 +188,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
     let parser;
     if fused_variants.is_empty() {
         parser = quote!{
-            winnow::combinator::dispatch!{crate::lexer::ident;
+            winnow::combinator::dispatch!{crate::parser::ident;
                 #(#variant_parsers)*
                 _ => fail,
             }.parse_next(input)
@@ -196,7 +196,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
     } else {
         parser = quote!{
             winnow::combinator::alt((
-                winnow::combinator::dispatch!{crate::lexer::ident;
+                winnow::combinator::dispatch!{crate::parser::ident;
                     #(#variant_parsers)*
                     _ => fail,
                 },
@@ -209,7 +209,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     quote! {
         impl #impl_generics ParseInstruction<'a> for #name #ty_generics #where_clause {
-            fn parse<'b>(input: &mut crate::lexer::Stream<'a, 'b>) -> winnow::ModalResult<#name #ty_generics, crate::lexer::Error> where Self: 'a
+            fn parse<'b>(input: &mut crate::parser::Stream<'a, 'b>) -> winnow::ModalResult<#name #ty_generics, crate::parser::Error> where Self: 'a
             {
                 use ::winnow::Parser;
                 use ::winnow::ascii::space1;

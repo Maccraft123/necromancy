@@ -7,8 +7,8 @@ use clap::Parser;
 
 mod cpu;
 
-mod lexer;
-use lexer::Token;
+mod parser;
+use parser::Token;
 
 mod section;
 use section::{Section, SymbolRegistry};
@@ -32,7 +32,7 @@ fn main() {
     let src = fs::read_to_string(&args.file).unwrap();
     let src = src.replace('\t', "        ");
     //let f = templater::process(&f);
-    let (mut tokens, _) = lexer::parse(&src);
+    let (mut tokens, _) = parser::parse(&src);
     let mut tokens = match tokens {
         Ok(t) => t,
         Err(e) => {
@@ -41,7 +41,7 @@ fn main() {
 
             let mut annotations = Vec::new();
             for c in e.context() {
-                use lexer::ParseContext;
+                use parser::ParseContext;
                 match c {
                     ParseContext::CurrentCpu(spanned) => {
                         let cpu = spanned.inner();
