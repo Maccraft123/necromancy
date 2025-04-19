@@ -2,11 +2,12 @@
 .os "dr,cp/m"
 
 .set BDOS 0x05
-.set PRINT_STR 0x09
+.set BDOS_PLUS_ONE (BDOS + 1)
+.set PRINT_STR (9*9/9+9-9)
 
 .section code 0x100
 entry:
-	ęśąćż
+	_ęśąćż
 	mvi c 0x05
 	lxi de hello_str
 	call BDOS

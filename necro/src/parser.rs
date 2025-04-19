@@ -132,7 +132,7 @@ macro_rules! impl_parse_num {
                                 .context(ParseContext::Label("binary digit")),
                             _ => fail,
                         },
-                        take_while(1.., |v| char::is_digit(v, 2)).try_map(|s| <$t>::from_str_radix(s, 2))
+                        take_while(1.., |v| char::is_digit(v, 10)).try_map(|s| <$t>::from_str_radix(s, 10))
                                 .context(ParseContext::Label("decimal digit")),
                     )).parse_next(input)
                 }

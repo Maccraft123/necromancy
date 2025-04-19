@@ -10,6 +10,9 @@ mod cpu;
 mod parser;
 use parser::Token;
 
+mod lexer;
+
+
 mod section;
 use section::{Section, SymbolRegistry};
 
@@ -31,6 +34,14 @@ fn main() {
 
     let src = fs::read_to_string(&args.file).unwrap();
     let src = src.replace('\t', "        ");
+    match lexer::lex(&src) {
+        Ok(tok) => eprintln!("{:#?}", tok),
+        Err(e) => {
+            eprintln!("raw {:#?}", e);
+            eprintln!("{}", e.display(&src));
+            return
+        },
+    }
     //let f = templater::process(&f);
     let (mut tokens, _) = parser::parse(&src);
     let mut tokens = match tokens {
