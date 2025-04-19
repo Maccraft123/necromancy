@@ -76,7 +76,7 @@ pub fn operand(input: TokenStream) -> TokenStream {
     let name = input.ident;
     quote! {
         impl<'a> ParseOperand<'a> for #name {
-            fn parse(input: &mut crate::lexer::Stream<'a, '_>) -> winnow::ModalResult<#name> {
+            fn parse(input: &mut crate::lexer::Stream<'a, '_>) -> winnow::ModalResult<#name, crate::lexer::Error> {
                 use ::winnow::Parser;
                 use ::winnow::combinator::{empty, fail};
                 /*
@@ -209,7 +209,7 @@ pub fn instruction(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     quote! {
         impl #impl_generics ParseInstruction<'a> for #name #ty_generics #where_clause {
-            fn parse<'b>(input: &mut crate::lexer::Stream<'a, 'b>) -> winnow::ModalResult<#name #ty_generics> where Self: 'a
+            fn parse<'b>(input: &mut crate::lexer::Stream<'a, 'b>) -> winnow::ModalResult<#name #ty_generics, crate::lexer::Error> where Self: 'a
             {
                 use ::winnow::Parser;
                 use ::winnow::ascii::space1;

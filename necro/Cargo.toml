@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+annotate-snippets = "0.11.5"
+anstream = "0.6.18"
 ariadne = "0.5.1"
 clap = { version = "4.5.30", features = ["derive"] }
 necro-derive = { version = "0.1.0", path = "../necro-derive" }
 num-traits = "0.2.19"
 regex = { version = "1.11.1", default-features = false }
-winnow = { version = "0.7.4", features = ["debug"] }
+winnow = { version = "0.7.4", features = ["debug"]}
+#winnow = "0.7.4"
 
 [profile.release]
 opt-level = "s"

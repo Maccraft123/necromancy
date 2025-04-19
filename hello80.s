@@ -1,5 +1,5 @@
-.set cpu "intel,8080"
-.set os "dr,cp/m"
+.cpu "intel,8080"
+.os "dr,cp/m"
 
 .set BDOS 0x05
 .set PRINT_STR 0x09

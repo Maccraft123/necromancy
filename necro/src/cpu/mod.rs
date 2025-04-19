@@ -9,17 +9,17 @@ mod i8080;
 use necro_derive::ParseOperand;
 /// A common trait for parsing any kind of operand
 pub trait ParseOperand<'a>: Sized {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<Self>;
+    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<Self, crate::lexer::Error>;
 }
 
 impl<'a, T: ParseNum> ParseOperand<'a> for T {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<T> {
+    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<T, crate::lexer::Error> {
         lexer::number.parse_next(input)
     }
 }
 
 impl<'a, T: ParseNum> ParseOperand<'a> for MaybeSymbolNoEndian<'a, T> {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<MaybeSymbolNoEndian<'a, T>> {
+    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<MaybeSymbolNoEndian<'a, T>, crate::lexer::Error> {
         alt((
             lexer::number.map(MaybeSymbolNoEndian::new_literal),
             lexer::ident.map(MaybeSymbolNoEndian::new_symbol),
@@ -28,7 +28,7 @@ impl<'a, T: ParseNum> ParseOperand<'a> for MaybeSymbolNoEndian<'a, T> {
 }
 
 impl<'a, E: TypeEndian, T: ParseNum> ParseOperand<'a> for MaybeSymbol<'a, E, T> {
-    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<MaybeSymbol<'a, E, T>> {
+    fn parse(input: &mut lexer::Stream<'a, '_>) -> ModalResult<MaybeSymbol<'a, E, T>, crate::lexer::Error> {
         alt((
             lexer::number.map(MaybeSymbol::new_literal),
             lexer::ident.map(MaybeSymbol::new_symbol),
@@ -94,7 +94,7 @@ use necro_derive::ParseInstruction;
 ///     together into one word
 ///
 pub trait ParseInstruction<'a>: Sized {
-    fn parse<'b>(input: &'b mut lexer::Stream<'a, '_>) -> ModalResult<Self> where Self: 'a;
+    fn parse<'b>(input: &'b mut lexer::Stream<'a, '_>) -> ModalResult<Self, crate::lexer::Error> where Self: 'a;
 }
 
 use necro_derive::EncodeInstruction;
@@ -213,7 +213,6 @@ impl<'a> EncodeInstruction for DynInstruction<'a> {
 pub enum Cpu {
     Intel8080,
     Mos6502,
-    None,
 }
 
 use winnow::{Stateful, ModalResult, Parser};
@@ -221,10 +220,10 @@ use winnow::error::StrContext;
 use winnow::error::StrContextValue;
 use winnow::combinator::{delimited, alt, fail};
 use winnow::ascii::till_line_ending;
-use crate::lexer::ParseState;
+use crate::lexer::{ParseContext, Stream};
 
 impl Cpu {
-    pub fn parse(input: &mut Stateful<&str, &mut ParseState>) -> ModalResult<Cpu> {
+    pub fn parse(input: &mut Stream<'_, '_>) -> ModalResult<Cpu, crate::lexer::Error> {
         delimited(
             '"',
             alt((
@@ -232,21 +231,48 @@ impl Cpu {
                 "mos,6502".value(Cpu::Mos6502),
             )),
             '"',
-        ).context(StrContext::Label("cpu"))
-            .context(StrContext::Expected(StrContextValue::Description("CPU compatible string")))
+        ).context(ParseContext::Label("cpu"))
             .parse_next(input)
     }
-    pub fn instruction<'a, 'b>(&self, input: &'b mut lexer::Stream<'a, '_>) -> ModalResult<DynInstruction<'a>> {
+
+    /*pub fn instruction<'a, 'b>(&self, input: &'b mut lexer::Stream<'a, '_>) -> ModalResult<DynInstruction<'a>, crate::lexer::Error> {
         match self {
-            Cpu::Intel8080 => i8080::Instruction::parse(input).map(DynInstruction::Intel8080),
-            //Cpu::Intel8080 => todo!(),
+            Cpu::Intel8080 => {
+                i8080::Instruction::parse(input)
+                    .map(DynInstruction::Intel8080)
+            }
             Cpu::Mos6502 => {
-                till_line_ending.map(|v: &str| DynInstruction::Mos6502(v.to_string())).parse_next(input)
+                till_line_ending
+                    .map(|v: &str| {
+                        DynInstruction::Mos6502(v.to_string())
+                    })
+                .parse_next(input)
             },
-            Cpu::None => {
-                fail
-                    .context(StrContext::Label("no cpu set, FIXME: this error should be better"))
+        }
+    }*/
+}
+
+use crate::lexer::{Error};
+use winnow::error::ErrMode;
+
+impl<'a> Parser<Stream<'a, '_>, DynInstruction<'a>, ErrMode<Error>> for Cpu {
+    fn parse_next(&mut self, input: &mut Stream<'a, '_>) -> Result<DynInstruction<'a>, ErrMode<Error>> {
+        use annotate_snippets::Level;
+        use winnow::combinator::peek;
+        let span = peek(till_line_ending.span()).parse_next(input)?;
+        match self {
+            Cpu::Intel8080 => {
+                i8080::Instruction::parse
+                    .context(ParseContext::Annotation(Level::Error, span, "".to_string()))
+                    .map(DynInstruction::Intel8080)
                     .parse_next(input)
+            }
+            Cpu::Mos6502 => {
+                till_line_ending
+                    .map(|v: &str| {
+                        DynInstruction::Mos6502(v.to_string())
+                    })
+                .parse_next(input)
             },
         }
     }
